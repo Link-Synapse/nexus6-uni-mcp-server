@@ -1,0 +1,6 @@
+
+{
+  "projects": [
+    { "slug": "nexus6", "local_dir": "./projects/nexus6" }
+  ]
+}
