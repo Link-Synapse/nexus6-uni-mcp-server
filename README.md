@@ -253,3 +253,6 @@ MIT License - see LICENSE file for details
 - [ ] Advanced project templates
 - [ ] Knowledge base RAG integration
 - [ ] Automated documentation generation
+
+## Docs
+- [MCP Code Review](./docs/mcp_code_review.md)

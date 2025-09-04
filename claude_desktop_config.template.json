@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "nexus6-mcp": {
+      "type": "stdio",
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "dist/unified/server.js"
+      ],
+      "cwd": "C:\\Users\\STENCH\\Documents\\Projects\\nexus6-uni-mcp-server",
+      "env": {
+        "AIRTABLE_API_KEY": "your_real_key",
+        "AIRTABLE_BASE_ID": "appM75fvKM3nYyOaF",
+        "GITHUB_TOKEN": "your_real_token",
+        "GITHUB_OWNER": "Link-Synapse",
+        "GITHUB_REPO": "nexus6-uni-mcp-server"
+      }
+    }
+  }
+}
