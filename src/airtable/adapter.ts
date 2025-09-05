@@ -18,7 +18,9 @@ export class AirtableAdapter {
   }
 
   async upsertDoc(table: string, slug: string, fields: Record<string, any>) {
-    const formula = `Slug="${slug.replace(/"/g, '\"')}"`;
+    // Properly escape slug for Airtable formula using field reference syntax
+    const escapedSlug = slug.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const formula = `{Slug}="${escapedSlug}"`;
     const url = new URL(this.baseUrl(table));
     url.searchParams.set("filterByFormula", formula);
     url.searchParams.set("maxRecords", "1");
