@@ -1,6 +1,4 @@
-
 {
-  "token": "YOUR_GITHUB_TOKEN",
   "owner": "Link-Synapse",
   "repo": "nexus6-uni-mcp-server",
   "docs_dir": "docs"
