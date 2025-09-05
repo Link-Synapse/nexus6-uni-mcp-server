@@ -8,7 +8,7 @@
     "start:ui": "node server/server.js",
     "dev:mcp": "tsx src/unified/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start:mcp": "node dist/unified/server.js",
+    "start:mcp": "node dist/src/unified/server.js",
     "dev": "npm-run-all -p start:ui dev:mcp",
     "type-check": "tsc --noEmit",
     "lint": "eslint src/**/*.ts",

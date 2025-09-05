@@ -31,7 +31,13 @@ async function main() {
         const data = await airtable.listRecords(args.table, { view: args.view, maxRecords: args.maxRecords });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
-        console.error("Airtable list failed", { table: args.table, view: args.view, maxRecords: args.maxRecords, error: err?.message });
+        console.error("Airtable list failed", { 
+          table: args.table, 
+          view: args.view, 
+          maxRecords: args.maxRecords, 
+          error: err?.message,
+          timestamp: new Date().toISOString()
+        });
         throw new McpError(ErrorCode.InternalError, `Airtable list failed: ${err?.message}`);
       }
     }
@@ -57,7 +63,13 @@ async function main() {
         });
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
-        console.error("Airtable upsert failed", { table: args.table, slug: args.slug, status: args.status, error: err?.message });
+        console.error("Airtable upsert failed", { 
+          table: args.table, 
+          slug: args.slug, 
+          status: args.status, 
+          error: err?.message,
+          timestamp: new Date().toISOString()
+        });
         throw new McpError(ErrorCode.InternalError, `Airtable upsert failed: ${err?.message}`);
       }
     }
@@ -77,7 +89,12 @@ async function main() {
         const data = await github.createOrUpdateFile(args.path, args.content, args.message);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (err: any) {
-        console.error("GitHub write failed", { path: args.path, message: args.message, error: err?.message });
+        console.error("GitHub write failed", { 
+          path: args.path, 
+          message: args.message, 
+          error: err?.message,
+          timestamp: new Date().toISOString()
+        });
         throw new McpError(ErrorCode.InternalError, `GitHub write failed: ${err?.message}`);
       }
     }
@@ -91,8 +108,17 @@ async function main() {
     },
     { title: "A2A create session" },
     async (args) => {
-      const id = chat.createSession(args.participants);
-      return { content: [{ type: "text", text: id }] };
+      try {
+        const id = chat.createSession(args.participants);
+        return { content: [{ type: "text", text: id }] };
+      } catch (err: any) {
+        console.error("A2A session creation failed", {
+          participants: args.participants,
+          error: err?.message,
+          timestamp: new Date().toISOString()
+        });
+        throw new McpError(ErrorCode.InternalError, `A2A session creation failed: ${err?.message}`);
+      }
     }
   );
 
@@ -106,8 +132,18 @@ async function main() {
     },
     { title: "A2A send message" },
     async (args) => {
-      chat.sendMessage(args.sessionId, args.sender, args.content);
-      return { content: [{ type: "text", text: "ok" }] };
+      try {
+        chat.sendMessage(args.sessionId, args.sender, args.content);
+        return { content: [{ type: "text", text: "ok" }] };
+      } catch (err: any) {
+        console.error("A2A message send failed", {
+          sessionId: args.sessionId,
+          sender: args.sender,
+          error: err?.message,
+          timestamp: new Date().toISOString()
+        });
+        throw new McpError(ErrorCode.InternalError, `A2A message send failed: ${err?.message}`);
+      }
     }
   );
 
@@ -116,6 +152,9 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("MCP server failed:", e);
+  console.error("MCP server failed:", {
+    error: e?.message,
+    timestamp: new Date().toISOString()
+  });
   process.exit(1);
 });

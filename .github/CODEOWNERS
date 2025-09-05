@@ -1,0 +1,12 @@
+# Global ownership
+* @Link-Synapse
+
+# Security-sensitive files require review
+/config/ @Link-Synapse
+claude_desktop_config.template.json @Link-Synapse
+.github/ @Link-Synapse
+
+# Core MCP server components
+/src/ @Link-Synapse
+/server/ @Link-Synapse
+/adapters/ @Link-Synapse

@@ -12,6 +12,21 @@ export class GitHubAdapter {
   }
 
   async createOrUpdateFile(path: string, content: string, message: string) {
+    // Validate path for security - prevent path traversal
+    if (path.includes('..') || path.startsWith('/') || path.includes('\\')) {
+      throw new Error('Invalid file path: path traversal detected');
+    }
+    
+    // Validate content size (1MB limit)
+    if (content.length > 1024 * 1024) {
+      throw new Error('Content too large (max 1MB)');
+    }
+    
+    // Validate commit message not empty
+    if (!message.trim()) {
+      throw new Error('Commit message cannot be empty');
+    }
+
     let sha: string | undefined;
     { const res = await fetch(this.url(path), { headers: this.headers() });
       if (res.ok) { const js = await res.json(); sha = js.sha; } }
