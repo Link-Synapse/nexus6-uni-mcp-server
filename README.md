@@ -195,6 +195,24 @@ npm test
 npm run dev
 ```
 
+## Performance and hardening
+
+Optimizations implemented to reduce transfer size and improve load time:
+
+- HTTP compression with safe filter (skips SSE) via `compression`
+- Security headers via `helmet`
+- Static asset caching:
+  - `index.html`: `Cache-Control: no-store`
+  - JS/CSS: `Cache-Control: public, max-age=3600`
+  - Images/icons: `Cache-Control: public, max-age=31536000, immutable`
+- Async, non-blocking logging for `/api/log` and `/api/a2a/message`
+- SSE heartbeat every 25s and disabled proxy buffering
+- UI inline JS extracted to `ui/app.js` and loaded with `defer`
+
+Notes:
+
+- Tests require `AIRTABLE_*` and `GITHUB_*` env vars; they will fail without credentials. Run selectively or set env.
+
 ### Adding New AI Services
 ```typescript
 // src/ai/providers/newai.ts
