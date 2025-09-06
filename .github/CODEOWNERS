@@ -1,0 +1,11 @@
+/REVIEW_SCOPE.md                           @Chaz-Barclay @Axlon-AI
+/server/**                                 @Chaz-Barclay @Axlon-AI
+/adapters/**                               @Chaz-Barclay @Axlon-AI
+/config/**                                 @Chaz-Barclay @Axlon-AI
+/ui/**                                     @Chaz-Barclay @Axlon-AI
+/prompts/**                                @Chaz-Barclay @Axlon-AI
+/projects/**                               @Chaz-Barclay @Axlon-AI
+/SCR/**                                    
+/node_modules/**                           
+/dist/**                                   
+/logs/**                                   

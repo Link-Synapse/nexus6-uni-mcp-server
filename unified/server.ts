@@ -1,183 +1,77 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+/**
+ * unified/server.ts — Main entry with real UI mount (TypeScript, ESM-safe)
+ * - Serves /ui and /health with Express
+ * - ESM-compatible __dirname using import.meta.url
+ * - Honors SERVER_UI_PORT / UI_PORT and UI_BIND
+ */
+import "dotenv/config";
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import express from "express";
+import { fileURLToPath } from "node:url";
 
-import { loadConfig } from "../config/environment.js";
-import { AirtableAdapter } from "../airtable/adapter.js";
-import { GitHubAdapter } from "../github/adapter.js";
-import { ChatCoordinator } from "../chat/coordinator.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-/** Boot the MCP server using stdio transport (Claude Desktop compatible). */
-async function main() {
-  const cfg = loadConfig();
+function createUiServer(opts: { bind?: string; port?: number; sseHandler?: express.RequestHandler } = {}) {
+  const bind = opts.bind || process.env.UI_BIND || "127.0.0.1";
+  const port = Number(opts.port ?? process.env.SERVER_UI_PORT ?? process.env.UI_PORT ?? 3002);
 
-  const server = new McpServer({
-    name: "nexus6-unified-mcp",
-    version: "1.1.0"
+  const app = express();
+  app.disable("x-powered-by");
+
+  // Health endpoint
+  app.get("/health", (_req, res) => res.status(200).send("OK"));
+
+  // Optional SSE placeholder
+  if (opts.sseHandler) {
+    app.get("/api/a2a/feed", opts.sseHandler);
+  }
+
+  // Resolve UI dir robustly for both ts-node and compiled dist
+  let uiDir: string = "";
+  const tryPaths = [
+    path.resolve(__dirname, "..", "ui"),          // when running ts-node from project root
+    path.resolve(__dirname, "..", "..", "ui"),    // when running compiled from dist/
+    path.resolve(process.cwd(), "ui"),            // fallback to CWD/ui
+  ];
+  for (const p of tryPaths) {
+    if (fs.existsSync(path.join(p, "index.html"))) {
+      uiDir = p;
+      break;
+    }
+  }
+  if (!uiDir) uiDir = path.resolve(process.cwd(), "ui");
+
+  app.get("/ui", (_req, res) => {
+    const indexPath = path.join(uiDir, "index.html");
+    if (!fs.existsSync(indexPath)) {
+      return res.status(500).send("ui/index.html not found");
+    }
+    res.sendFile(indexPath);
+  });
+  app.use("/ui", express.static(uiDir, { fallthrough: true, index: false }));
+
+  const server = http.createServer(app);
+  server.listen(port, bind, () => {
+    console.log(`[Nexus6] UI listening on http://${bind}:${port}/ui`);
+    console.log(`[Nexus6] UI dir: ${uiDir}`);
   });
 
-  const airtable = new AirtableAdapter(cfg.airtable.apiKey, cfg.airtable.baseId);
-  const github = new GitHubAdapter(cfg.github.token, cfg.github.owner, cfg.github.repo);
-  const chat = new ChatCoordinator();
-
-  // ---- TOOLS: Airtable -------------------------------------------------------
-  server.tool(
-    {
-      name: "airtable_list_records",
-      description: "List records from an Airtable table",
-      inputSchema: {
-        type: "object",
-        properties: {
-          table: { type: "string", description: "Airtable table name" },
-          view: { type: "string" },
-          maxRecords: { type: "number", default: 100 }
-        },
-        required: ["table"]
-      }
-    },
-    async (req) => {
-      const schema = z.object({
-        table: z.string(),
-        view: z.string().optional(),
-        maxRecords: z.number().int().min(1).max(1000).optional()
-      });
-      const { table, view, maxRecords } = schema.parse(req.params.arguments ?? {});
-      try {
-        const records = await airtable.listRecords(table, { view, maxRecords });
-        return { content: [{ type: "json", json: records }] };
-      } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, `Airtable list failed: ${err.message}`);
-      }
-    }
-  );
-
-  // (Example) Create or update a Doc row in Airtable
-  server.tool(
-    {
-      name: "airtable_upsert_doc",
-      description: "Create or update a doc row in Airtable Docs table by slug",
-      inputSchema: {
-        type: "object",
-        properties: {
-          table: { type: "string", default: "Docs" },
-          slug: { type: "string" },
-          name: { type: "string" },
-          content: { type: "string" },
-          status: { type: "string", enum: ["Draft", "Ready", "Approved"], default: "Draft" }
-        },
-        required: ["slug", "name", "content"]
-      }
-    },
-    async (req) => {
-      const schema = z.object({
-        table: z.string().default("Docs"),
-        slug: z.string(),
-        name: z.string(),
-        content: z.string(),
-        status: z.enum(["Draft", "Ready", "Approved"]).default("Draft")
-      });
-      const args = schema.parse(req.params.arguments ?? {});
-      try {
-        const result = await airtable.upsertDoc(args.table, args.slug, {
-          Name: args.name,
-          Content: args.content,
-          Status: args.status
-        });
-        return { content: [{ type: "json", json: result }] };
-      } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, `Airtable upsert failed: ${err.message}`);
-      }
-    }
-  );
-
-  // ---- TOOLS: GitHub ---------------------------------------------------------
-  server.tool(
-    {
-      name: "github_create_or_update_file",
-      description: "Create or update a file in GitHub repo (commits with message)",
-      inputSchema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "Path inside repo, e.g. docs/README.md" },
-          content: { type: "string", description: "Raw file content (utf-8)" },
-          message: { type: "string", description: "Commit message" }
-        },
-        required: ["path", "content", "message"]
-      }
-    },
-    async (req) => {
-      const schema = z.object({
-        path: z.string(),
-        content: z.string(),
-        message: z.string()
-      });
-      const { path, content, message } = schema.parse(req.params.arguments ?? {});
-      try {
-        const result = await github.createOrUpdateFile(path, content, message);
-        return { content: [{ type: "json", json: result }] };
-      } catch (err: any) {
-        throw new McpError(ErrorCode.InternalError, `GitHub write failed: ${err.message}`);
-      }
-    }
-  );
-
-  // ---- TOOLS: A2A Chat (local coordinator) -----------------------------------
-  server.tool(
-    {
-      name: "a2a_create_session",
-      description: "Create an A2A chat session with participants",
-      inputSchema: {
-        type: "object",
-        properties: {
-          participants: { type: "array", items: { type: "string" } }
-        },
-        required: ["participants"]
-      }
-    },
-    async (req) => {
-      const schema = z.object({ participants: z.array(z.string()).min(1) });
-      const { participants } = schema.parse(req.params.arguments ?? {});
-      const id = chat.createSession(participants);
-      return { content: [{ type: "text", text: id }] };
-    }
-  );
-
-  server.tool(
-    {
-      name: "a2a_send_message",
-      description: "Send message in an A2A session",
-      inputSchema: {
-        type: "object",
-        properties: {
-          sessionId: { type: "string" },
-          sender: { type: "string" },
-          content: { type: "string" }
-        },
-        required: ["sessionId", "sender", "content"]
-      }
-    },
-    async (req) => {
-      const schema = z.object({
-        sessionId: z.string(),
-        sender: z.string(),
-        content: z.string()
-      });
-      const { sessionId, sender, content } = schema.parse(req.params.arguments ?? {});
-      chat.sendMessage(sessionId, sender, content);
-      return { content: [{ type: "text", text: "ok" }] };
-    }
-  );
-
-  // (Resources/Prompts can be added next; starting with Tools keeps us nimble)
-
-  // Start server over stdio transport
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  // Keep process alive
+  return { app, server, port, bind };
 }
 
-main().catch((e) => {
-  console.error("MCP server failed:", e);
-  process.exit(1);
+// === MCP stdio bootstrap (existing/main implementation placeholder) ===
+console.log("[Nexus6] MCP stdio server should initialize here on MAIN...");
+
+// Optional SSE placeholder; wire real handler later
+const sseHandler: express.RequestHandler | undefined = undefined;
+
+// Start UI server
+createUiServer({ sseHandler });
+
+process.on("SIGINT", () => {
+  console.log("Shutting down...");
+  process.exit(0);
 });

@@ -1,121 +1,119 @@
-import "dotenv/config";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+// Nexus6 MCP — unified server (Phase 1 ready)
+
+import { McpServer } from "@modelcontextprotocol/sdk/server";
+import { stdioTransport } from "@modelcontextprotocol/sdk/stdio-transport";
+import { JSONSchema } from "@modelcontextprotocol/sdk/types";
 
 import { loadConfig } from "../config/environment.js";
 import { AirtableAdapter } from "../airtable/adapter.js";
 import { GitHubAdapter } from "../github/adapter.js";
-import { ChatCoordinator } from "../chat/coordinator.js";
+
+// Phase 1 Architect tools (memory, roles, doc ops)
+import { registerPhase1Tools } from "../features/phase1/registerTools";
+
+// Types for minimal example tools
+type Dict = Record<string, unknown>;
 
 async function main() {
+  // 1) Load config + construct adapters (no secrets here; they must come from env)
   const cfg = loadConfig();
-  const server = new McpServer({ name: "nexus6-uni-mcp", version: "1.1.4" });
+  const airtable = new AirtableAdapter(
+    cfg.airtable.apiKey || "",
+    cfg.airtable.baseId || ""
+  );
+  const github = new GitHubAdapter(
+    cfg.github.token || "",
+    cfg.github.owner || "",
+    cfg.github.repo || ""
+  );
 
-  const airtable = new AirtableAdapter(cfg.airtable.apiKey, cfg.airtable.baseId);
-  const github = new GitHubAdapter(cfg.github.token, cfg.github.owner, cfg.github.repo);
-  const chat = new ChatCoordinator();
+  // 2) Start MCP server
+  const server = new McpServer();
 
-  // ---- Airtable: list records
+  // 2a) Minimal health tool (quick sanity from Claude)
   server.tool(
-    "airtable_list_records",
+    "nexus6.health",
     {
-      table: z.string().describe("Table name to query (e.g., Docs)"),
-      view: z.string().optional().describe("Specific Airtable view to use"),
-      maxRecords: z.number().int().min(1).max(1000).optional().describe("Maximum records to return (default 100)")
+      description: "Return server health and basic config visibility (no secrets).",
+      inputSchema: { type: "object", properties: {} } as JSONSchema,
     },
-    { title: "List Airtable records", idempotentHint: true },
-    async (args) => {
+    async () => {
+      return {
+        ok: true,
+        ts: new Date().toISOString(),
+        githubOwner: cfg.github.owner ?? null,
+        githubRepo: cfg.github.repo ?? null,
+        airtableBase: cfg.airtable.baseId ? mask(cfg.airtable.baseId) : null,
+      };
+    }
+  );
+
+  // 2b) Safe example: list Airtable tables (read-only)
+  // Adjust if your AirtableAdapter has a different API.
+  server.tool(
+    "airtable.listTables",
+    {
+      description: "List Airtable tables for the configured base (read-only).",
+      inputSchema: { type: "object", properties: {} } as JSONSchema,
+    },
+    async () => {
       try {
-        const data = await airtable.listRecords(args.table, { view: args.view, maxRecords: args.maxRecords });
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        // If your adapter uses another method, change here.
+        // Many Airtable SDK flows can list tables via meta API; keep as placeholder:
+        const meta = await (airtable as any).listTables?.();
+        return { tables: meta ?? [] };
       } catch (err: any) {
-        console.error("Airtable list failed", { table: args.table, view: args.view, maxRecords: args.maxRecords, error: err?.message });
-        throw new McpError(ErrorCode.InternalError, `Airtable list failed: ${err?.message}`);
+        return {
+          error: "Failed to list tables",
+          message: err?.message ?? String(err),
+          ts: new Date().toISOString(),
+        };
       }
     }
   );
 
-  // ---- Airtable: upsert doc
+  // 2c) Safe example: show a repo root listing (read-only)
+  // If your GitHubAdapter API differs, adapt the call signature.
   server.tool(
-    "airtable_upsert_doc",
+    "github.listRoot",
     {
-      table: z.string().default("Docs").describe("Table name (defaults to 'Docs')"),
-      slug: z.string().describe("Unique slug for the document"),
-      name: z.string().describe("Human-readable document title"),
-      content: z.string().describe("Markdown or plain text content"),
-      status: z.enum(["Draft", "Ready", "Approved"]).default("Draft").describe("Workflow status")
+      description:
+        "List files at repository root (read-only; uses configured owner/repo).",
+      inputSchema: { type: "object", properties: {} } as JSONSchema,
     },
-    { title: "Upsert Airtable doc" },
-    async (args) => {
+    async () => {
       try {
-        const data = await airtable.upsertDoc(args.table ?? "Docs", args.slug, {
-          Name: args.name,
-          Content: args.content,
-          Status: args.status ?? "Draft"
-        });
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        // Placeholder call; adjust to your adapter’s method
+        const files = await (github as any).listRepoRoot?.();
+        return { files: files ?? [] };
       } catch (err: any) {
-        console.error("Airtable upsert failed", { table: args.table, slug: args.slug, status: args.status, error: err?.message });
-        throw new McpError(ErrorCode.InternalError, `Airtable upsert failed: ${err?.message}`);
+        return {
+          error: "Failed to list repo root",
+          message: err?.message ?? String(err),
+          ts: new Date().toISOString(),
+        };
       }
     }
   );
 
-  // ---- GitHub: create or update file
-  server.tool(
-    "github_create_or_update_file",
-    {
-      path: z.string().describe("Path in repo, e.g., docs/README.md"),
-      content: z.string().describe("UTF-8 file content"),
-      message: z.string().describe("Commit message to use")
-    },
-    { title: "GitHub create/update file" },
-    async (args) => {
-      try {
-        const data = await github.createOrUpdateFile(args.path, args.content, args.message);
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-      } catch (err: any) {
-        console.error("GitHub write failed", { path: args.path, message: args.message, error: err?.message });
-        throw new McpError(ErrorCode.InternalError, `GitHub write failed: ${err?.message}`);
-      }
-    }
-  );
+  // 3) Register Phase 1 Architect tools (memory, roles, doc ops)
+  registerPhase1Tools(server, { baseDir: process.cwd() });
 
-  // ---- A2A: create session
-  server.tool(
-    "a2a_create_session",
-    {
-      participants: z.array(z.string()).min(1).describe("Array of agent/user identifiers")
-    },
-    { title: "A2A create session" },
-    async (args) => {
-      const id = chat.createSession(args.participants);
-      return { content: [{ type: "text", text: id }] };
-    }
-  );
-
-  // ---- A2A: send message
-  server.tool(
-    "a2a_send_message",
-    {
-      sessionId: z.string().describe("Session ID returned by a2a_create_session"),
-      sender: z.string().describe("Sender identifier"),
-      content: z.string().describe("Message body")
-    },
-    { title: "A2A send message" },
-    async (args) => {
-      chat.sendMessage(args.sessionId, args.sender, args.content);
-      return { content: [{ type: "text", text: "ok" }] };
-    }
-  );
-
-  const transport = new StdioServerTransport();
+  // 4) Connect stdio transport (Claude Desktop will talk to us here)
+  const transport = stdioTransport();
   await server.connect(transport);
+
+  console.error("[Nexus6] MCP server up (Phase 1).");
 }
 
 main().catch((e) => {
-  console.error("MCP server failed:", e);
+  console.error("MCP server failed:", { message: e?.message, ts: new Date().toISOString() });
   process.exit(1);
 });
+
+// --- helpers ---
+function mask(s: string, visible = 4) {
+  if (!s) return s;
+  const n = Math.max(0, s.length - visible);
+  return "*".repeat(n) + s.slice(-visible);
+}

@@ -1,5 +1,5 @@
 // src/airtable/adapter.ts
-// Minimal Airtable adapter with explicit JSON typing to satisfy TS strict mode.
+// Minimal Airtable adapter with safe JSON typing
 
 export interface AirtableRecord<T = Record<string, unknown>> {
   id: string;
@@ -19,7 +19,7 @@ export class AirtableAdapter {
   private headers() {
     return {
       Authorization: `Bearer ${this.apiKey}`,
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     };
   }
 
@@ -43,9 +43,8 @@ export class AirtableAdapter {
       const text = await res.text();
       throw new Error(`Airtable ${res.status}: ${text}`);
     }
-    const json: any = await res.json(); // <-- explicitly 'any'
-    const records = (json && json.records) ? (json.records as AirtableRecord<T>[]) : [];
-    return records;
+    const json: any = await res.json(); // safe cast
+    return (json?.records ?? []) as AirtableRecord<T>[];
   }
 
   /**
@@ -60,46 +59,41 @@ export class AirtableAdapter {
     const findUrl = new URL(this.baseUrl(table));
     findUrl.searchParams.set("maxRecords", "1");
     findUrl.searchParams.set("filterByFormula", filterByFormula);
-
     const found = await fetch(findUrl, { headers: this.headers() });
     if (!found.ok) {
       const text = await found.text();
       throw new Error(`Airtable find ${found.status}: ${text}`);
     }
-    const foundJson: any = await found.json(); // <-- explicitly 'any'
+    const json: any = await found.json(); // safe cast
 
-    if (foundJson?.records?.length) {
-      const id: string = foundJson.records[0].id as string;
-
+    if (json?.records?.length) {
+      const id = json.records[0].id as string;
       // update
       const upd = await fetch(this.baseUrl(table), {
         method: "PATCH",
         headers: this.headers(),
-        body: JSON.stringify({ records: [{ id, fields }] }),
+        body: JSON.stringify({ records: [{ id, fields }] })
       });
       if (!upd.ok) {
         const text = await upd.text();
         throw new Error(`Airtable update ${upd.status}: ${text}`);
       }
-      const updJson: any = await upd.json(); // <-- explicitly 'any'
-      const rec: AirtableRecord<T> = (updJson?.records?.[0] ??
-        { id, fields }) as AirtableRecord<T>;
-      return rec;
+      const updJson: any = await upd.json();
+      return (updJson?.records?.[0] ?? { id, fields }) as AirtableRecord<T>;
     } else {
       // create
       const crt = await fetch(this.baseUrl(table), {
         method: "POST",
         headers: this.headers(),
-        body: JSON.stringify({ records: [{ fields }] }),
+        body: JSON.stringify({ records: [{ fields }] })
       });
       if (!crt.ok) {
         const text = await crt.text();
         throw new Error(`Airtable create ${crt.status}: ${text}`);
       }
-      const crtJson: any = await crt.json(); // <-- explicitly 'any'
-      const rec: AirtableRecord<T> = (crtJson?.records?.[0] ??
+      const crtJson: any = await crt.json();
+      return (crtJson?.records?.[0] ??
         { id: "new", fields }) as AirtableRecord<T>;
-      return rec;
     }
   }
 }

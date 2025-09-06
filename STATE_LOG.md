@@ -1,2 +1,3 @@
-# STATE_LOG (append-only)
-- 2025-09-03T22:50:29.599466Z — repo scaffolded.
+# STATE_LOG.md (append-only)
+
+- 2025-09-05 12:00:00 | Axlon | init: Phase 1 Architect Features pack staged

@@ -1,16 +1,10 @@
-
-# Node
-node_modules/
-dist/
-*.log
+# env
 .env
 .env.*
-# OS
-.DS_Store
-Thumbs.db
-# Local data
-data/
-logs/*.ndjson
-# Build artifacts
-*.zip
-*.tar.gz
+
+# local logs/build
+logs/
+dist/
+
+# DO NOT COMMIT secrets
+config/*.local.json

@@ -1,0 +1,24 @@
+
+{
+  "mcpServers": {
+    "nexus6-mcp": {
+      "type": "stdio",
+      "command": "C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:\\\\Users\\\\STENCH\\\\Documents\\\\Projects\\\\nexus6-uni-mcp-server\\\\scripts\\\\launch-mcp.ps1"
+      ],
+      "cwd": "C:\\\\Users\\\\STENCH\\\\Documents\\\\Projects\\\\nexus6-uni-mcp-server",
+      "env": {
+        "AIRTABLE_API_KEY": "pat",
+        "AIRTABLE_BASE_ID": "appM75fvKM3nYyOaF",
+        "GITHUB_TOKEN": "github_pat",
+        "GITHUB_OWNER": "Link-Synapse",
+        "GITHUB_REPO": "nexus6-uni-mcp-server",
+        "GITHUB_BRANCH": "main"
+      }
+    }
+  }
+}

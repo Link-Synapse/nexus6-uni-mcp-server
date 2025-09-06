@@ -1,58 +1,149 @@
-
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Nexus6 MCP UI</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Nexus6 — Push/Pull + Memory + A2A</title>
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
-    button { padding: 8px 12px; margin: 4px; border-radius: 10px; border: 1px solid #ccc; }
-    #log { white-space: pre-wrap; border: 1px solid #ddd; padding: 12px; border-radius: 8px; max-height: 300px; overflow: auto; }
-    input, textarea { width: 100%; max-width: 700px; margin: 6px 0; padding: 8px; }
-    .row { margin: 12px 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; color: #e5e7eb; background:#0b0f14;}
+    h1,h2 { color: #fff; }
+    .row { display:flex; gap:24px; flex-wrap: wrap; }
+    .card { background:#111826; border:1px solid #1f2937; border-radius:16px; padding:16px; width: 360px; }
+    input, select, textarea, button { width:100%; padding:8px; border-radius:10px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb}
+    button { cursor:pointer; }
+    pre { white-space: pre-wrap; background:#0b0f14; padding:12px; border-radius: 8px; border:1px solid #1f2937; max-height:200px; overflow:auto }
+    .log { font-size: 12px; line-height: 1.4; max-height: 180px; overflow:auto; background:#0b0f14; border:1px solid #1f2937; padding:8px; border-radius: 8px;}
+    .small { font-size: 12px; opacity: 0.8; }
+    hr { border:0; border-top:1px solid #1f2937; margin:16px 0; }
+    a { color: #93c5fd; }
   </style>
 </head>
 <body>
-  <h1>Nexus6 — Push/Pull + Hash + Log + A2A</h1>
+  <h1>Nexus6 — Push/Pull + Memory + A2A</h1>
+  <p class="small">REST base: <code>/api</code> · Live feed: <code>/api/a2a/feed</code></p>
 
   <div class="row">
-    <h3>STATE_LOG</h3>
-    <input id="logLine" placeholder="One-line entry" />
-    <button onclick="appendLog()">Append</button>
-  </div>
+    <div class="card">
+      <h2>List Repo Docs</h2>
+      <button onclick="listRepo()">List</button>
+      <pre id="repoList"></pre>
+      <h2>Pull Doc</h2>
+      <input id="pullSlug" placeholder="slug (e.g., state-log)">
+      <button onclick="pullDoc()">Pull</button>
+      <pre id="pullOut"></pre>
+    </div>
 
-  <div class="row">
-    <h3>SHA-256</h3>
-    <textarea id="hashText" rows="4" placeholder="Enter text to hash"></textarea>
-    <button onclick="hashText()">Compute</button>
-    <div id="hashOut"></div>
-  </div>
+    <div class="card">
+      <h2>Push Doc (Airtable → GitHub)</h2>
+      <input id="project" placeholder="project (e.g., nexus6)"/>
+      <input id="slug" placeholder="slug (must be approved in Airtable)"/>
+      <button onclick="pushDoc()">Push</button>
+      <pre id="pushOut"></pre>
+      <hr/>
+      <h3>Append STATE_LOG</h3>
+      <input id="agent" placeholder="agent (e.g., Axlon)"/>
+      <input id="msg" placeholder="message"/>
+      <input id="projLog" placeholder="project (optional)"/>
+      <button onclick="appendLog()">Append</button>
+      <pre id="logOut"></pre>
+    </div>
 
-  <div class="row">
-    <h3>A2A Live Feed</h3>
-    <button onclick="connectFeed()">Connect Live Feed</button>
-    <div id="log"></div>
+    <div class="card">
+      <h2>Memory</h2>
+      <input id="ns" placeholder="namespace"/>
+      <input id="key" placeholder="key"/>
+      <textarea id="val" placeholder="value (JSON allowed)"></textarea>
+      <input id="ttl" placeholder="ttlSeconds (optional)"/>
+      <button onclick="memSet()">Set</button>
+      <button onclick="memGet()">Get</button>
+      <button onclick="memList()">List Keys</button>
+      <pre id="memOut"></pre>
+      <hr/>
+      <h3>Compute SHA-256</h3>
+      <textarea id="shaInput" placeholder="paste text to hash"></textarea>
+      <button onclick="hashText()">Hash</button>
+      <pre id="shaOut"></pre>
+    </div>
+
+    <div class="card">
+      <h2>A2A Live Feed</h2>
+      <button onclick="connectFeed()">Connect</button>
+      <div class="log" id="feed"></div>
+      <hr/>
+      <h3>Role Prompts</h3>
+      <select id="role">
+        <option value="axlon_instructions">Axlon</option>
+        <option value="claude_instructions">Claude</option>
+        <option value="hashing_guide">Hashing Guide</option>
+      </select>
+      <button onclick="getPrompt()">Get</button>
+      <pre id="promptOut"></pre>
+    </div>
   </div>
 
 <script>
+async function listRepo(){
+  const r = await fetch("/api/repo/docs");
+  document.getElementById("repoList").textContent = JSON.stringify(await r.json(), null, 2);
+}
+async function pullDoc(){
+  const slug = document.getElementById("pullSlug").value.trim();
+  const r = await fetch("/api/repo/doc?slug="+encodeURIComponent(slug));
+  document.getElementById("pullOut").textContent = JSON.stringify(await r.json(), null, 2);
+}
+async function pushDoc(){
+  const project = document.getElementById("project").value.trim();
+  const slug = document.getElementById("slug").value.trim();
+  const r = await fetch("/api/repo/push", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({project, slug})});
+  document.getElementById("pushOut").textContent = JSON.stringify(await r.json(), null, 2);
+}
 async function appendLog(){
-  const line = document.getElementById('logLine').value;
-  const r = await fetch('/api/log', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({agent:'Axlon', message: line})});
-  alert('Logged: ' + (await r.text()));
+  const agent = document.getElementById("agent").value.trim();
+  const message = document.getElementById("msg").value.trim();
+  const project = document.getElementById("projLog").value.trim();
+  const r = await fetch("/api/log", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({agent, message, project: project || undefined})});
+  document.getElementById("logOut").textContent = JSON.stringify(await r.json(), null, 2);
+}
+async function memSet(){
+  const namespace = document.getElementById("ns").value.trim();
+  const key = document.getElementById("key").value.trim();
+  let value = document.getElementById("val").value;
+  try { value = JSON.parse(value); } catch {}
+  const ttlSeconds = Number(document.getElementById("ttl").value || 0) || undefined;
+  const r = await fetch("/api/memory/set", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({namespace, key, value, ttlSeconds})});
+  document.getElementById("memOut").textContent = JSON.stringify(await r.json(), null, 2);
+}
+async function memGet(){
+  const namespace = document.getElementById("ns").value.trim();
+  const key = document.getElementById("key").value.trim();
+  const r = await fetch(`/api/memory/get?namespace=${encodeURIComponent(namespace)}&key=${encodeURIComponent(key)}`);
+  document.getElementById("memOut").textContent = JSON.stringify(await r.json(), null, 2);
+}
+async function memList(){
+  const namespace = document.getElementById("ns").value.trim();
+  const r = await fetch(`/api/memory/list?namespace=${encodeURIComponent(namespace)}`);
+  document.getElementById("memOut").textContent = JSON.stringify(await r.json(), null, 2);
 }
 async function hashText(){
-  const text = document.getElementById('hashText').value;
-  const r = await fetch('/api/hash', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})});
-  document.getElementById('hashOut').textContent = await r.text();
+  const t = document.getElementById("shaInput").value;
+  const enc = new TextEncoder().encode(t);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  const arr = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  document.getElementById("shaOut").textContent = arr;
 }
 function connectFeed(){
-  const ev = new EventSource('/api/a2a/feed');
-  const log = document.getElementById('log');
-  ev.onmessage = (m)=>{
-    const d = JSON.parse(m.data);
-    log.textContent += `\n[${new Date(d.ts).toLocaleTimeString()}] ${d.from} → ${d.to}: ${d.body}`;
-  };
+  const feed = document.getElementById("feed");
+  const evt = new EventSource("/api/a2a/feed");
+  evt.onmessage = (e) => { feed.innerHTML = `<div>${new Date().toLocaleTimeString()} :: ${e.data}</div>` + feed.innerHTML; };
+  evt.addEventListener("hello", (e) => { feed.innerHTML = `<div>hello: ${e.data}</div>` + feed.innerHTML; });
+  evt.addEventListener("repo.push", (e) => { feed.innerHTML = `<div>repo.push: ${e.data}</div>` + feed.innerHTML; });
+  evt.addEventListener("state_log.append", (e) => { feed.innerHTML = `<div>state_log.append: ${e.data}</div>` + feed.innerHTML; });
+  evt.addEventListener("memory.set", (e) => { feed.innerHTML = `<div>memory.set: ${e.data}</div>` + feed.innerHTML; });
+}
+async function getPrompt(){
+  const role = document.getElementById("role").value;
+  const r = await fetch(`/api/prompts/${role}`);
+  document.getElementById("promptOut").textContent = await r.text();
 }
 </script>
 </body>
