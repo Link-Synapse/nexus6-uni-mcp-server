@@ -48,6 +48,21 @@ app.use(
   })
 );
 
+// Expose built artifacts for direct download
+const DOWNLOADS_DIR = path.join(__dirname, "..", "builds");
+fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+app.use(
+  "/downloads",
+  express.static(DOWNLOADS_DIR, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.setHeader("Content-Disposition", `attachment; filename=\"${path.basename(filePath)}\"`);
+    },
+  })
+);
+
 const LOG_PATH = path.join(__dirname, "..", "logs", "a2a.ndjson");
 fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
 
