@@ -7,6 +7,7 @@ export class ChatCoordinator {
   private sessions = new Map<string, Session>();
   private readonly maxSessions = 100;
   private readonly sessionTTL = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly maxMessagesPerSession = 1000;
 
   createSession(participants: string[]) {
     this.cleanupExpiredSessions();
@@ -29,6 +30,10 @@ export class ChatCoordinator {
     const s = this.sessions.get(sessionId);
     if (!s) throw new Error("Session not found");
     s.messages.push({ ts: Date.now(), sender, content });
+    if (s.messages.length > this.maxMessagesPerSession) {
+      // Drop oldest messages to cap memory usage
+      s.messages.splice(0, s.messages.length - this.maxMessagesPerSession);
+    }
   }
 
   private cleanupExpiredSessions() {
